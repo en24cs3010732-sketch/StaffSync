@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import API from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { isSameLocalDay } from '../utils/date';
 
 export default function Attendance() {
   const { user } = useAuth();
@@ -16,8 +16,9 @@ export default function Attendance() {
       const data = res.data.data || res.data || [];
       setAttendanceList(data);
 
-      const today = new Date().toISOString().split('T')[0];
-      const current = data.find((a) => a.date && a.date.split('T')[0] === today);
+      const current = data.find(
+        (a) => a.date && isSameLocalDay(a.date) && (a.user?._id || a.user) === user?._id
+      );
       setTodayRecord(current || null);
     } catch (err) {
       console.error('Failed to fetch attendance', err);
@@ -28,7 +29,7 @@ export default function Attendance() {
 
   useEffect(() => {
     fetchAttendance();
-  }, []);
+  }, [user?._id]);
 
   const handleClockIn = async () => {
     setActionLoading(true);
@@ -67,7 +68,7 @@ export default function Attendance() {
             <button
               onClick={handleClockIn}
               disabled={actionLoading}
-              className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-lg text-sm transition shadow-sm"
+              className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-lg text-sm transition shadow-sm disabled:opacity-60"
             >
               {actionLoading ? 'Processing...' : 'Clock In Now'}
             </button>
@@ -75,7 +76,7 @@ export default function Attendance() {
             <button
               onClick={handleClockOut}
               disabled={actionLoading}
-              className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg text-sm transition shadow-sm"
+              className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg text-sm transition shadow-sm disabled:opacity-60"
             >
               {actionLoading ? 'Processing...' : 'Clock Out Now'}
             </button>

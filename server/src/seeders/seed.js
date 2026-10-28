@@ -1,13 +1,10 @@
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
+const { connectDB, disconnectDB } = require('../config/db');
 const User = require('../models/User');
 const Announcement = require('../models/Announcement');
 
 dotenv.config();
-
-const connectDB = async () => {
-  await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/staffsync');
-};
 
 const seedData = async (shouldExit = true) => {
   try {
@@ -65,6 +62,7 @@ const seedData = async (shouldExit = true) => {
     console.log('Employee: employee@staffsync.com / Password123!');
 
     if (shouldExit) {
+      await disconnectDB();
       process.exit(0);
     }
   } catch (error) {

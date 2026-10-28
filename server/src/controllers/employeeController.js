@@ -1,3 +1,5 @@
+const mongoose = require('mongoose');
+const handleError = require('../utils/handleError');
 const User = require('../models/User');
 
 // @desc    Get all employees / directory
@@ -5,23 +7,27 @@ const User = require('../models/User');
 // @access  Private
 const getEmployees = async (req, res) => {
   try {
-    const { department, role, search } = req.query;
+    const { department, role, search, includeInactive } = req.query;
     let query = {};
+
+    // Deactivated ("deleted") employees are hidden unless explicitly requested
+    if (includeInactive !== 'true') query.isActive = true;
 
     if (department) query.department = department;
     if (role) query.role = role;
     if (search) {
+      const safe = String(search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { position: { $regex: search, $options: 'i' } }
+        { name: { $regex: safe, $options: 'i' } },
+        { email: { $regex: safe, $options: 'i' } },
+        { position: { $regex: safe, $options: 'i' } }
       ];
     }
 
     const employees = await User.find(query).select('-password').sort({ createdAt: -1 });
     res.json(employees);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 
@@ -30,13 +36,16 @@ const getEmployees = async (req, res) => {
 // @access  Private
 const getEmployeeById = async (req, res) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
     const employee = await User.findById(req.params.id).select('-password');
     if (!employee) {
       return res.status(404).json({ message: 'Employee not found' });
     }
     res.json(employee);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 
@@ -47,14 +56,24 @@ const createEmployee = async (req, res) => {
   try {
     const { name, email, password, role, department, position, designation, phone } = req.body;
 
-    const userExists = await User.findOne({ email });
+    if (!name || !email) {
+      return res.status(400).json({ message: 'Please provide name and email' });
+    }
+
+    // Only admins may create managers/admins
+    if (role && role !== 'employee' && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Only admins can create managers or admins' });
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const userExists = await User.findOne({ email: normalizedEmail });
     if (userExists) {
       return res.status(400).json({ message: 'Employee with this email already exists' });
     }
 
     const employee = await User.create({
-      name,
-      email,
+      name: String(name).trim(),
+      email: normalizedEmail,
       password: password || 'TempPassword123!',
       role: role || 'employee',
       department: department || 'General',
@@ -72,7 +91,7 @@ const createEmployee = async (req, res) => {
       phone: employee.phone
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 
@@ -92,17 +111,32 @@ const updateEmployee = async (req, res) => {
     }
 
     const { name, department, position, designation, phone, avatar, isActive, role } = req.body;
+    const isPrivileged = req.user.role === 'admin' || req.user.role === 'manager';
 
-    employee.name = name || employee.name;
-    employee.department = department || employee.department;
-    employee.position = position || designation || employee.position;
-    employee.phone = phone !== undefined ? phone : employee.phone;
-    employee.avatar = avatar !== undefined ? avatar : employee.avatar;
+    if (name) employee.name = name;
+    if (phone !== undefined) employee.phone = phone;
+    if (avatar !== undefined) employee.avatar = avatar;
 
-    // Only admin or manager can change role and active status
-    if (req.user.role === 'admin' || req.user.role === 'manager') {
-      if (role) employee.role = role;
-      if (isActive !== undefined) employee.isActive = isActive;
+    // Department / position: admin or manager only
+    if (isPrivileged) {
+      if (department) employee.department = department;
+      if (position || designation) employee.position = position || designation;
+
+      // Don't let someone deactivate themselves
+      if (isActive !== undefined && req.user._id.toString() !== req.params.id) {
+        employee.isActive = isActive;
+      }
+    }
+
+    // Role changes: admin only (prevents managers promoting themselves/others to admin)
+    if (role && role !== employee.role) {
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ message: 'Only admins can change roles' });
+      }
+      if (req.user._id.toString() === req.params.id) {
+        return res.status(400).json({ message: 'You cannot change your own role' });
+      }
+      employee.role = role;
     }
 
     const updatedEmployee = await employee.save();
@@ -111,7 +145,7 @@ const updateEmployee = async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 
@@ -125,12 +159,16 @@ const deleteEmployee = async (req, res) => {
       return res.status(404).json({ message: 'Employee not found' });
     }
 
+    if (req.user._id.toString() === req.params.id) {
+      return res.status(400).json({ message: 'You cannot deactivate your own account' });
+    }
+
     employee.isActive = false;
     await employee.save();
 
     res.json({ message: 'Employee deactivated successfully' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 

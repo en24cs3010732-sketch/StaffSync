@@ -1,3 +1,4 @@
+const handleError = require('../utils/handleError');
 const LeaveRequest = require('../models/LeaveRequest');
 
 // @desc    Submit leave request
@@ -9,6 +10,15 @@ const submitLeaveRequest = async (req, res) => {
 
     if (!startDate || !endDate || !reason) {
       return res.status(400).json({ message: 'Please provide start date, end date, and reason' });
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (isNaN(start) || isNaN(end)) {
+      return res.status(400).json({ message: 'Invalid start or end date' });
+    }
+    if (end < start) {
+      return res.status(400).json({ message: 'End date cannot be before start date' });
     }
 
     const leaveRequest = await LeaveRequest.create({
@@ -23,7 +33,7 @@ const submitLeaveRequest = async (req, res) => {
     const populatedLeave = await LeaveRequest.findById(leaveRequest._id).populate('user', 'name email department');
     res.status(201).json(populatedLeave);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 
@@ -44,7 +54,7 @@ const getLeaves = async (req, res) => {
 
     res.json(leaves);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 
@@ -64,6 +74,10 @@ const updateLeaveStatus = async (req, res) => {
       return res.status(404).json({ message: 'Leave request not found' });
     }
 
+    if (leaveRequest.status !== 'pending') {
+      return res.status(400).json({ message: `This request was already ${leaveRequest.status}` });
+    }
+
     leaveRequest.status = status;
     leaveRequest.approver = req.user._id;
     if (comments) leaveRequest.comments = comments;
@@ -76,7 +90,7 @@ const updateLeaveStatus = async (req, res) => {
 
     res.json(updatedLeave);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 

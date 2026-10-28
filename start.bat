@@ -8,6 +8,6 @@ timeout /t 3 /nobreak >nul
 start "StaffSync Client" cmd /k "cd client && npm run dev"
 echo.
 echo StaffSync is running!
-echo Backend:  http://localhost:5000
+echo Backend:  http://localhost:5001
 echo Frontend: http://localhost:5173
 echo.

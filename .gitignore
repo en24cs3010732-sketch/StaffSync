@@ -35,3 +35,6 @@ Thumbs.db
 .cache/
 tmp/
 temp/
+
+# Embedded database files (created when no local MongoDB is installed)
+server/.data/

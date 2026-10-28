@@ -1,49 +1,55 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
+const handleError = require('../utils/handleError');
+const { getJwtSecret, getJwtExpire } = require('../config/jwt');
 
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET || 'supersecretstaffsyncjwtkeychangeinproduction', {
-    expiresIn: process.env.JWT_EXPIRE || '7d'
-  });
-};
+const generateToken = (id) => jwt.sign({ id }, getJwtSecret(), { expiresIn: getJwtExpire() });
+
+const userPayload = (user) => ({
+  _id: user._id,
+  name: user.name,
+  email: user.email,
+  role: user.role,
+  department: user.department,
+  position: user.position,
+  token: generateToken(user._id),
+});
 
 // @desc    Register user
 // @route   POST /api/auth/register
-// @access  Public (or Admin only depending on business logic, but public for initial demo setup/signup)
+// @access  Public. Self-registered users are always 'employee'
+//          (the very first user in an empty database becomes 'admin').
 const register = async (req, res) => {
   try {
-    const { name, email, password, role, department, position, designation, phone } = req.body;
+    const { name, email, password, department, position, designation, phone } = req.body;
 
-    const userExists = await User.findOne({ email });
-    if (userExists) {
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: 'Please provide name, email and password' });
+    }
+    if (String(password).length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters' });
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    if (await User.findOne({ email: normalizedEmail })) {
       return res.status(400).json({ message: 'User already exists' });
     }
 
+    const isFirstUser = (await User.countDocuments()) === 0;
+
     const user = await User.create({
-      name,
-      email,
+      name: String(name).trim(),
+      email: normalizedEmail,
       password,
-      role: role || 'employee',
+      role: isFirstUser ? 'admin' : 'employee',
       department: department || 'General',
       position: position || designation || 'Staff',
-      phone: phone || ''
+      phone: phone || '',
     });
 
-    if (user) {
-      res.status(201).json({
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        department: user.department,
-        position: user.position,
-        token: generateToken(user._id)
-      });
-    } else {
-      res.status(400).json({ message: 'Invalid user data' });
-    }
+    res.status(201).json(userPayload(user));
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 
@@ -53,26 +59,20 @@ const register = async (req, res) => {
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Please provide email and password' });
+    }
 
-    const user = await User.findOne({ email }).select('+password');
-    if (user && (await user.matchPassword(password))) {
+    const user = await User.findOne({ email: String(email).trim().toLowerCase() }).select('+password');
+    if (user && (await user.matchPassword(String(password)))) {
       if (!user.isActive) {
         return res.status(401).json({ message: 'Account is deactivated' });
       }
-      res.json({
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        department: user.department,
-        position: user.position,
-        token: generateToken(user._id)
-      });
-    } else {
-      res.status(401).json({ message: 'Invalid email or password' });
+      return res.json(userPayload(user));
     }
+    res.status(401).json({ message: 'Invalid email or password' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 
@@ -81,10 +81,9 @@ const login = async (req, res) => {
 // @access  Private
 const getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
-    res.json(user);
+    res.json(req.user);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 

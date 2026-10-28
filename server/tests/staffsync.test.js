@@ -34,47 +34,22 @@ describe('StaffSync Backend Comprehensive Test Suite', () => {
   let employeeId, managerId, adminId;
 
   beforeEach(async () => {
-    // Create Admin
-    const adminRes = await request(app)
-      .post('/api/auth/register')
-      .send({
-        name: 'Admin User',
-        email: 'admin@staffsync.com',
-        password: 'Password123!',
-        role: 'admin',
-        department: 'Management',
-        position: 'Administrator'
-      });
-    adminToken = adminRes.body.token;
-    adminId = adminRes.body._id;
+    // Privileged accounts are created directly (public registration only creates employees)
+    const make = (name, email, role, department, position) =>
+      User.create({ name, email, password: 'Password123!', role, department, position });
 
-    // Create Manager
-    const managerRes = await request(app)
-      .post('/api/auth/register')
-      .send({
-        name: 'Manager User',
-        email: 'manager@staffsync.com',
-        password: 'Password123!',
-        role: 'manager',
-        department: 'Engineering',
-        position: 'Engineering Manager'
-      });
-    managerToken = managerRes.body.token;
-    managerId = managerRes.body._id;
+    const admin = await make('Admin User', 'admin@staffsync.com', 'admin', 'Management', 'Administrator');
+    const manager = await make('Manager User', 'manager@staffsync.com', 'manager', 'Engineering', 'Engineering Manager');
+    const employee = await make('Employee User', 'employee@staffsync.com', 'employee', 'Engineering', 'Software Engineer');
+    adminId = admin._id.toString();
+    managerId = manager._id.toString();
+    employeeId = employee._id.toString();
 
-    // Create Employee
-    const employeeRes = await request(app)
-      .post('/api/auth/register')
-      .send({
-        name: 'Employee User',
-        email: 'employee@staffsync.com',
-        password: 'Password123!',
-        role: 'employee',
-        department: 'Engineering',
-        position: 'Software Engineer'
-      });
-    employeeToken = employeeRes.body.token;
-    employeeId = employeeRes.body._id;
+    const login = async (email) =>
+      (await request(app).post('/api/auth/login').send({ email, password: 'Password123!' })).body.token;
+    adminToken = await login('admin@staffsync.com');
+    managerToken = await login('manager@staffsync.com');
+    employeeToken = await login('employee@staffsync.com');
   });
 
   // ==========================================
@@ -137,6 +112,22 @@ describe('StaffSync Backend Comprehensive Test Suite', () => {
       expect(res.body).toHaveProperty('message');
     });
 
+    it('should NOT let a self-registered user choose the admin role', async () => {
+      const res = await request(app)
+        .post('/api/auth/register')
+        .send({ name: 'Sneaky', email: 'sneaky@staffsync.com', password: 'Password123!', role: 'admin' });
+
+      expect(res.statusCode).toEqual(201);
+      expect(res.body.role).toEqual('employee');
+    });
+
+    it('should login regardless of email letter case', async () => {
+      const res = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'Employee@StaffSync.com', password: 'Password123!' });
+      expect(res.statusCode).toEqual(200);
+    });
+
     it('should fail login with non-existent email', async () => {
       const res = await request(app)
         .post('/api/auth/login')
@@ -180,6 +171,33 @@ describe('StaffSync Backend Comprehensive Test Suite', () => {
 
       expect(res.statusCode).toEqual(201);
       expect(res.body.email).toEqual('hire@staffsync.com');
+    });
+
+    it('should forbid a manager from creating an admin', async () => {
+      const res = await request(app)
+        .post('/api/employees')
+        .set('Authorization', `Bearer ${managerToken}`)
+        .send({ name: 'Boss', email: 'boss@staffsync.com', password: 'Password123!', role: 'admin' });
+      expect(res.statusCode).toEqual(403);
+    });
+
+    it('should hide deactivated employees from the directory', async () => {
+      const del = await request(app)
+        .delete(`/api/employees/${employeeId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(del.statusCode).toEqual(200);
+
+      const list = await request(app)
+        .get('/api/employees')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(list.body.find((e) => e._id === employeeId)).toBeUndefined();
+    });
+
+    it('should not let an admin deactivate themselves', async () => {
+      const res = await request(app)
+        .delete(`/api/employees/${adminId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.statusCode).toEqual(400);
     });
 
     it('should forbid employee from publishing announcements', async () => {
@@ -240,6 +258,14 @@ describe('StaffSync Backend Comprehensive Test Suite', () => {
           reason: 'Incomplete dates'
         });
 
+      expect(res.statusCode).toEqual(400);
+    });
+
+    it('should reject a leave request whose end date is before its start date', async () => {
+      const res = await request(app)
+        .post('/api/leaves')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({ leaveType: 'annual', startDate: '2026-11-10', endDate: '2026-11-01', reason: 'Backwards' });
       expect(res.statusCode).toEqual(400);
     });
 

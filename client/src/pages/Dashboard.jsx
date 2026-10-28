@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import API from '../services/api';
 import { Users, Calendar, Clock, Megaphone, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { isSameLocalDay } from '../utils/date';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -12,6 +13,7 @@ export default function Dashboard() {
     announcementsCount: 0,
   });
   const [clockedIn, setClockedIn] = useState(false);
+  const [shiftDone, setShiftDone] = useState(false);
   const [loadingClock, setLoadingClock] = useState(false);
 
   useEffect(() => {
@@ -30,12 +32,13 @@ export default function Dashboard() {
         const attendance = attRes.data.data || attRes.data || [];
 
         // Check if clocked in today without clock-out
-        const today = new Date().toISOString().split('T')[0];
+        // (the API is role-aware: managers/admins get everyone's records, so match on the current user)
         const todayAttendance = attendance.find(
-          (a) => a.date && a.date.split('T')[0] === today
+          (a) => a.date && isSameLocalDay(a.date) && (a.user?._id || a.user) === user?._id
         );
-        if (todayAttendance && !todayAttendance.clockOut) {
-          setClockedIn(true);
+        if (todayAttendance && todayAttendance.clockIn) {
+          setClockedIn(!todayAttendance.clockOut);
+          setShiftDone(!!todayAttendance.clockOut);
         }
 
         setStats({
@@ -48,7 +51,7 @@ export default function Dashboard() {
       }
     };
     fetchDashboardData();
-  }, []);
+  }, [user?._id]);
 
   const handleClockToggle = async () => {
     setLoadingClock(true);
@@ -56,6 +59,7 @@ export default function Dashboard() {
       if (clockedIn) {
         await API.post('/attendance/clock-out');
         setClockedIn(false);
+        setShiftDone(true);
       } else {
         await API.post('/attendance/clock-in');
         setClockedIn(true);
@@ -82,19 +86,19 @@ export default function Dashboard() {
             <p className="text-xs text-brand-100 uppercase tracking-wider font-semibold">Status</p>
             <p className="text-lg font-bold flex items-center mt-0.5">
               <span className={`w-3 h-3 rounded-full mr-2 ${clockedIn ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
-              {clockedIn ? 'Clocked In' : 'Clocked Out'}
+              {clockedIn ? 'Clocked In' : shiftDone ? 'Shift Completed' : 'Clocked Out'}
             </p>
           </div>
           <button
             onClick={handleClockToggle}
-            disabled={loadingClock}
+            disabled={loadingClock || shiftDone}
             className={`px-4 py-2 rounded-lg font-medium text-sm transition shadow ${
               clockedIn
                 ? 'bg-red-500 hover:bg-red-600 text-white'
                 : 'bg-emerald-500 hover:bg-emerald-600 text-white'
-            }`}
+            } disabled:opacity-60 disabled:cursor-not-allowed`}
           >
-            {loadingClock ? 'Processing...' : clockedIn ? 'Clock Out' : 'Clock In'}
+            {loadingClock ? 'Processing...' : clockedIn ? 'Clock Out' : shiftDone ? 'Done for today' : 'Clock In'}
           </button>
         </div>
       </div>

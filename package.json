@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "description": "StaffSync - HR & Employee Management System",
   "scripts": {
-    "start": "node server/server.js",
+    "setup": "npm --prefix server install && npm --prefix client install",
+    "start": "./start.sh",
     "server": "npm --prefix server start",
-    "client": "npm --prefix client dev",
+    "client": "npm --prefix client run dev",
+    "seed": "npm --prefix server run seed",
     "test": "npm --prefix server test"
   }
 }

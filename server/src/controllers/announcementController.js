@@ -1,3 +1,4 @@
+const handleError = require('../utils/handleError');
 const Announcement = require('../models/Announcement');
 
 // @desc    Publish announcement
@@ -22,7 +23,7 @@ const createAnnouncement = async (req, res) => {
     const populated = await Announcement.findById(announcement._id).populate('author', 'name email role');
     res.status(201).json(populated);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 
@@ -37,7 +38,7 @@ const getAnnouncements = async (req, res) => {
 
     res.json(announcements);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 

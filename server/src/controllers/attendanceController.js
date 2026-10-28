@@ -1,3 +1,4 @@
+const handleError = require('../utils/handleError');
 const Attendance = require('../models/Attendance');
 
 // @desc    Clock in
@@ -39,7 +40,7 @@ const clockIn = async (req, res) => {
     const populated = await Attendance.findById(attendance._id).populate('user', 'name email department');
     res.status(201).json(populated);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 
@@ -77,7 +78,7 @@ const clockOut = async (req, res) => {
     const populated = await Attendance.findById(attendance._id).populate('user', 'name email department');
     res.json(populated);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 
@@ -96,10 +97,13 @@ const getAttendance = async (req, res) => {
     }
 
     if (startDate && endDate) {
-      query.date = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      };
+      const from = new Date(startDate);
+      const to = new Date(endDate);
+      to.setHours(23, 59, 59, 999); // include the whole end day
+      if (isNaN(from) || isNaN(to)) {
+        return res.status(400).json({ message: 'Invalid date range' });
+      }
+      query.date = { $gte: from, $lte: to };
     }
 
     const records = await Attendance.find(query)
@@ -108,7 +112,7 @@ const getAttendance = async (req, res) => {
 
     res.json(records);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    handleError(res, error);
   }
 };
 

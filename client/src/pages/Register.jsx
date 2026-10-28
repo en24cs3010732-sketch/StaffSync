@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { UserPlus, Lock, Mail, User, Briefcase, AlertCircle } from 'lucide-react';
 
@@ -7,20 +7,21 @@ export default function Register() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('employee');
   const [department, setDepartment] = useState('Engineering');
   const [designation, setDesignation] = useState('Software Engineer');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { register } = useAuth();
+  const { register, token } = useAuth();
   const navigate = useNavigate();
+
+  if (token) return <Navigate to="/dashboard" replace />;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      await register(name, email, password, role, department, designation);
+      await register(name, email, password, department, designation);
       navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to register account');
@@ -91,6 +92,7 @@ export default function Register() {
               <input
                 type="password"
                 required
+                minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 text-sm"
@@ -99,30 +101,16 @@ export default function Register() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Role</label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                className="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-brand-500 text-sm"
-              >
-                <option value="employee">Employee</option>
-                <option value="manager">Manager</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Department</label>
-              <input
-                type="text"
-                required
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
-                className="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-brand-500 text-sm"
-                placeholder="Engineering"
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">Department</label>
+            <input
+              type="text"
+              required
+              value={department}
+              onChange={(e) => setDepartment(e.target.value)}
+              className="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-brand-500 text-sm"
+              placeholder="Engineering"
+            />
           </div>
 
           <div>

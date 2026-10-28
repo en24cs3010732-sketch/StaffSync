@@ -81,7 +81,10 @@ export default function Employees() {
     e.preventDefault();
     setEditError('');
     try {
-      await API.put(`/employees/${editingId}`, editData);
+      // Only admins may change roles; don't send the field for anyone else
+      const payload = { ...editData };
+      if (user?.role !== 'admin') delete payload.role;
+      await API.put(`/employees/${editingId}`, payload);
       setShowEditModal(false);
       fetchEmployees();
     } catch (err) {
@@ -90,7 +93,7 @@ export default function Employees() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this employee?')) return;
+    if (!window.confirm('Deactivate this employee? They will no longer be able to log in.')) return;
     try {
       await API.delete(`/employees/${id}`);
       fetchEmployees();
@@ -101,9 +104,9 @@ export default function Employees() {
 
   const filteredEmployees = employees.filter(
     (emp) =>
-      emp.name.toLowerCase().includes(search.toLowerCase()) ||
-      emp.email.toLowerCase().includes(search.toLowerCase()) ||
-      emp.department.toLowerCase().includes(search.toLowerCase())
+      (emp.name || '').toLowerCase().includes(search.toLowerCase()) ||
+      (emp.email || '').toLowerCase().includes(search.toLowerCase()) ||
+      (emp.department || '').toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -156,7 +159,7 @@ export default function Employees() {
                 <div className="flex items-start justify-between">
                   <div className="flex items-center space-x-3">
                     <div className="w-12 h-12 rounded-full bg-brand-50 text-brand-600 font-bold flex items-center justify-center text-lg">
-                      {emp.name.charAt(0).toUpperCase()}
+                      {(emp.name || '?').charAt(0).toUpperCase()}
                     </div>
                     <div>
                       <h3 className="font-semibold text-slate-900">{emp.name}</h3>
@@ -271,8 +274,8 @@ export default function Employees() {
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-brand-500"
                   >
                     <option value="employee">Employee</option>
-                    <option value="manager">Manager</option>
-                    <option value="admin">Admin</option>
+                    {user?.role === 'admin' && <option value="manager">Manager</option>}
+                    {user?.role === 'admin' && <option value="admin">Admin</option>}
                   </select>
                 </div>
                 <div>
@@ -356,6 +359,7 @@ export default function Employees() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
                   <select
                     value={editData.role}
+                    disabled={user?.role !== 'admin'}
                     onChange={(e) => setEditData({ ...editData, role: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-brand-500"
                   >
